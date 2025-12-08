@@ -54,7 +54,7 @@ socket.onclose = function (event) {
   clearInterval(PING_INTERVAL_ID);
 };
 
-const client = new MultiplayerTossupClient(room, USER_ID, socket);
+const client = new MultiplayerTossupBonusClient(room, USER_ID, socket);
 socket.onmessage = (message) => client.onmessage(message);
 
 document.getElementById('answer-input').addEventListener('input', function () {

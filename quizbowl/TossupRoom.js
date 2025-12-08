@@ -164,8 +164,6 @@ export default class TossupRoom extends QuestionRoom {
     if (this.queryingQuestion) { return false; }
     if (this.tossupProgress === TOSSUP_PROGRESS_ENUM.READING && !this.settings.skip) { return false; }
 
-    const username = this.players[userId].username;
-
     clearInterval(this.timer.interval);
     this.emitMessage({ type: 'timer-update', timeRemaining: 0 });
 
@@ -176,8 +174,17 @@ export default class TossupRoom extends QuestionRoom {
     this.paused = false;
 
     if (this.tossupProgress !== TOSSUP_PROGRESS_ENUM.ANSWER_REVEALED) { this.revealQuestion(); }
+    await this.nextRound(userId, { type });
+  }
 
+  async nextRound (userId, { type }) {
+    await this.nextTossup(userId, { type });
+  }
+
+  async nextTossup (userId, { type }) {
+    const username = this.players[userId].username;
     const oldTossup = this.tossup;
+
     this.tossup = await this.advanceQuestion();
     this.queryingQuestion = false;
     if (!this.tossup) {

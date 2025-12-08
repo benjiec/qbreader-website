@@ -8,6 +8,7 @@ import TossupRoom from '../../quizbowl/TossupRoom.js';
 import RateLimit from '../RateLimit.js';
 
 import getRandomTossups from '../../database/qbreader/get-random-tossups.js';
+import getRandomBonuses from '../../database/qbreader/get-random-bonuses.js';
 import getSet from '../../database/qbreader/get-set.js';
 import getSetList from '../../database/qbreader/get-set-list.js';
 import getNumPackets from '../../database/qbreader/get-num-packets.js';
@@ -23,7 +24,12 @@ const ServerMultiplayerRoomMixin = (RoomClass) => class extends RoomClass {
     this.isPermanent = isPermanent;
     this.checkAnswer = checkAnswer;
     this.getNumPackets = getNumPackets;
+
     this.getRandomQuestions = getRandomTossups;
+    // in case we are in a room that supports switching between Tossup and Bonus rounds
+    this.getRandomTossups = getRandomTossups;
+    this.getRandomBonuses = getRandomBonuses;
+
     this.getSet = getSet;
     this.bannedUserList = new Map();
     this.kickedUserList = new Map();

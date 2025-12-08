@@ -13,6 +13,7 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
 
   onmessage (event) {
     const data = JSON.parse(event.data);
+    console.log("MultiplayerClientMixin onmessage", data.type);
     switch (data.type) {
       case 'chat': return this.chat(data, false);
       case 'chat-live-update': return this.chat(data, true);
