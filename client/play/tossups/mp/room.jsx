@@ -1,4 +1,4 @@
-import MultiplayerTossupClient from './MultiplayerTossupClient.js';
+import MultiplayerTossupBonusClient from './MultiplayerTossupBonusClient.js';
 
 import CategoryManager from '../../../../quizbowl/category-manager.js';
 import { getDropdownValues } from '../../../scripts/utilities/dropdown-checklist.js';
