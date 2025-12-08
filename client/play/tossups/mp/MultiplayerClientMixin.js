@@ -13,7 +13,7 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
 
   onmessage (event) {
     const data = JSON.parse(event.data);
-    console.log("MultiplayerClientMixin onmessage", data.type);
+    console.log("MultiplayerClientMixin onmessage", data.type, data);
     switch (data.type) {
       case 'chat': return this.chat(data, false);
       case 'chat-live-update': return this.chat(data, true);
@@ -258,7 +258,9 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
     document.querySelector('#username').value = username;
   }
 
-  async giveAnswer ({ celerity, directive, directedPrompt, givenAnswer, perQuestionCelerity, score, tossup, userId, username }) {
+  async giveAnswer (data) {
+    const { directive, directedPrompt, givenAnswer, score, userId, username } = data;
+
     this.logGiveAnswer({ directive, givenAnswer, username });
 
     if (directive === 'prompt' && directedPrompt) {
@@ -269,7 +271,7 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
       this.logEventConditionally(username, `${score > 0 ? '' : 'in'}correctly answered for ${score} points`);
     }
 
-    super.giveAnswer({ directive, directedPrompt, score, userId });
+    super.giveAnswer(data);
 
     if (directive === 'prompt') { return; }
 
@@ -277,38 +279,48 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
 
     if (directive === 'accept') {
       document.getElementById('buzz').disabled = true;
+      document.getElementById('reveal').disabled = true;
       Array.from(document.getElementsByClassName('tuh')).forEach(element => {
         element.textContent = parseInt(element.innerHTML) + 1;
       });
     }
 
     if (directive === 'reject') {
-      document.getElementById('buzz').disabled = !document.getElementById('toggle-rebuzz').checked && userId === this.USER_ID;
+      if (data.tossup) {
+        document.getElementById('buzz').disabled = !document.getElementById('toggle-rebuzz').checked && userId === this.USER_ID;
+      }
+      else {
+        document.getElementById('reveal').disabled = !document.getElementById('toggle-rebuzz').checked && userId === this.USER_ID;
+      }
     }
 
-    if (score > 10) {
-      this.room.players[userId].powers++;
-    } else if (score === 10) {
-      this.room.players[userId].tens++;
-    } else if (score < 0) {
-      this.room.players[userId].negs++;
-    }
+    if (data.tossup) {
+      const { celerity, tossup, perQuestionCelerity } = data;
 
-    this.room.players[userId].points += score;
-    this.room.players[userId].tuh++;
-    this.room.players[userId].celerity = celerity;
+      if (score > 10) {
+        this.room.players[userId].powers++;
+      } else if (score === 10) {
+        this.room.players[userId].tens++;
+      } else if (score < 0) {
+        this.room.players[userId].negs++;
+      }
 
-    upsertPlayerItem(this.room.players[userId], this.USER_ID, this.room.ownerId, this.socket, this.room.public);
-    this.sortPlayerListGroup();
+      this.room.players[userId].points += score;
+      this.room.players[userId].tuh++;
+      this.room.players[userId].celerity = celerity;
 
-    if (userId === this.USER_ID) {
-      questionStats.recordTossup({
-        _id: tossup._id,
-        celerity: perQuestionCelerity,
-        isCorrect: score > 0,
-        multiplayer: true,
-        pointValue: score
-      });
+      upsertPlayerItem(this.room.players[userId], this.USER_ID, this.room.ownerId, this.socket, this.room.public);
+      this.sortPlayerListGroup();
+
+      if (userId === this.USER_ID) {
+        questionStats.recordTossup({
+          _id: tossup._id,
+          celerity: perQuestionCelerity,
+          isCorrect: score > 0,
+          multiplayer: true,
+          pointValue: score
+        });
+      }
     }
   }
 
@@ -445,7 +457,10 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
     }
   }
 
-  next ({ packetLength, oldTossup, tossup: nextTossup, type, username }) {
+  next (data) {
+    const username = data.username;
+    const type = data.type;
+
     const typeStrings = {
       end: 'ended the game',
       next: 'went to the next question',
@@ -454,7 +469,7 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
     };
     this.logEventConditionally(username, typeStrings[type]);
 
-    super.next({ nextTossup, oldTossup, packetLength, type });
+    super.next(data);
 
     if (type === 'start') {
       document.getElementById('next').classList.add('btn-primary');
@@ -466,8 +481,6 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
       document.getElementById('next').classList.remove('btn-primary');
       document.getElementById('next').classList.add('btn-success');
       document.getElementById('next').textContent = 'Start';
-    } else {
-      this.room.tossup = nextTossup;
     }
 
     this.showSkipButton();
@@ -494,6 +507,11 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
   revealAnswer ({ answer, question }) {
     super.revealAnswer({ answer, question });
     this.showNextButton();
+  }
+
+  revealNextAnswer ({ answer, currentPartNumber, lastPartRevealed }) {
+    super.revealNextAnswer({ answer, currentPartNumber, lastPartRevealed });
+    if (lastPartRevealed) { this.showNextButton(); }
   }
 
   setCategories ({ alternateSubcategories, categories, subcategories, percentView, categoryPercents, username }) {

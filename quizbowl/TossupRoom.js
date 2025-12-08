@@ -181,19 +181,21 @@ export default class TossupRoom extends QuestionRoom {
     await this.nextTossup(userId, { type });
   }
 
+  lastQuestionDict () { return { oldTossup: this.tossup }; }
+
   async nextTossup (userId, { type }) {
     const username = this.players[userId].username;
-    const oldTossup = this.tossup;
+    const lastQuestionDict = this.lastQuestionDict();
 
     this.tossup = await this.advanceQuestion();
     this.queryingQuestion = false;
     if (!this.tossup) {
-      this.emitMessage({ type: 'end', oldTossup, userId, username });
+      this.emitMessage({ ...lastQuestionDict, type: 'end', userId, username });
       return false;
     }
     this.questionSplit = this.tossup.question_sanitized.split(' ').filter(word => word !== '');
 
-    this.emitMessage({ type, packetLength: this.packetLength, oldTossup, tossup: this.tossup, userId, username });
+    this.emitMessage({ ...lastQuestionDict, type, packetLength: this.packetLength, tossup: this.tossup, userId, username });
 
     this.wordIndex = 0;
     this.tossupProgress = TOSSUP_PROGRESS_ENUM.READING;

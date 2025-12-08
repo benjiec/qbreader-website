@@ -30,7 +30,6 @@ export default class TossupBonusRoom extends TossupRoom {
       }
       return this.localQuestions.bonuses.shift();
     };
-    console.log("switching to getRandomBonuses");
     this.getRandomQuestions = this.getRandomBonuses;
 
     this.bonus = {};
@@ -61,9 +60,7 @@ export default class TossupBonusRoom extends TossupRoom {
 
   scoreTossup ({ givenAnswer }) {
     const decision = super.scoreTossup({ givenAnswer });
-    console.log("scoreTossup returns", decision);
     if (decision.directive === "accept") {
-      console.log("switching to Bonus round");
       this.switchToBonusRound();
     }
     return decision;
@@ -71,12 +68,19 @@ export default class TossupBonusRoom extends TossupRoom {
 
   async nextRound (userId, { type }) {
     if (this.currentRound === ROUND.TOSSUP) {
-      console.log("next Tossup question");
       await this.nextTossup(userId, { type });
     }
     else {
-      console.log("next Bonus question");
       await this.nextBonus(userId, { type });
+    }
+  }
+
+  lastQuestionDict () {
+    if (this.currentRound === ROUND.TOSSUP) {
+      return { oldBonus: this.bonus };
+    }
+    else {
+      return { oldTossup: this.tossup };
     }
   }
 
@@ -92,22 +96,21 @@ export default class TossupBonusRoom extends TossupRoom {
     const pointsPerPart = this.pointsPerPart;
 
     if (type === 'next' && bonusStarted) {
-      console.log("skipping this bonus, switch to Tossup round");
       this.players[userId].updateStats(this.pointsPerPart.reduce((a, b) => a + b, 0), 1);
       this.switchToTossupRound();
       await this.nextTossup(userId, { type });
     }
     else {
-      const oldBonus = this.bonus;
+      const lastQuestionDict = this.lastQuestionDict();
       this.bonus = await this.advanceQuestion();
       this.queryingQuestion = false;
+
       if (!this.bonus) {
-        this.emitMessage({ type: 'end', lastPartRevealed, oldBonus, pointsPerPart, stats, userId });
+        this.emitMessage({ ...lastQuestionDict, type: 'end', lastPartRevealed, pointsPerPart, stats, userId });
         return false;
       }
 
-      this.emitMessage({ type, bonus: this.bonus, lastPartRevealed, oldBonus, packetLength: this.packetLength, pointsPerPart });
-      console.log("start a new bonus question", this.bonus);
+      this.emitMessage({ ...lastQuestionDict, type, bonus: this.bonus, lastPartRevealed, packetLength: this.packetLength, pointsPerPart });
 
       this.currentPartNumber = -1;
       this.pointsPerPart = [];
