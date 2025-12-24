@@ -183,19 +183,20 @@ export default class TossupRoom extends QuestionRoom {
 
   lastQuestionDict () { return { oldTossup: this.tossup }; }
 
-  async nextTossup (userId, { type }) {
+  async nextTossup (userId, { type, oldBonus }) {
     const username = this.players[userId].username;
-    const lastQuestionDict = this.lastQuestionDict();
+    // Only include oldTossup if we're not coming from a bonus (oldBonus would already have the history)
+    const lastQuestionDict = oldBonus ? {} : this.lastQuestionDict();
 
     this.tossup = await this.advanceQuestion();
     this.queryingQuestion = false;
     if (!this.tossup) {
-      this.emitMessage({ ...lastQuestionDict, type: 'end', userId, username });
+      this.emitMessage({ ...lastQuestionDict, ...(oldBonus ? { oldBonus } : {}), type: 'end', userId, username });
       return false;
     }
     this.questionSplit = this.tossup.question_sanitized.split(' ').filter(word => word !== '');
 
-    this.emitMessage({ ...lastQuestionDict, type, packetLength: this.packetLength, tossup: this.tossup, userId, username });
+    this.emitMessage({ ...lastQuestionDict, ...(oldBonus ? { oldBonus } : {}), type, packetLength: this.packetLength, tossup: this.tossup, userId, username });
 
     this.wordIndex = 0;
     this.tossupProgress = TOSSUP_PROGRESS_ENUM.READING;

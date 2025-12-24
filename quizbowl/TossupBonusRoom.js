@@ -15,12 +15,15 @@ export default class TossupBonusRoom extends TossupRoom {
 
   switchToTossupRound () {
     this.currentRound = ROUND.TOSSUP;
+    this.randomQuestionCache = [];
+    this.bonusEligibleUserId = null;
     this.getNextLocalQuestion = super.getNextLocalQuestion;
     this.getRandomQuestions = this.getRandomTossups;
   }
 
   switchToBonusRound() {
     this.currentRound = ROUND.BONUS;
+    this.randomQuestionCache = [];
 
     this.getNextLocalQuestion = () => {
       if (this.localQuestions.bonuses.length === 0) { return null; }
@@ -45,7 +48,7 @@ export default class TossupBonusRoom extends TossupRoom {
     this.pointsPerPart = [];
 
     this.query = {
-      threePartBonuses: true,
+      bonusLength: 3,
       ...this.query
     };
   }
@@ -61,6 +64,7 @@ export default class TossupBonusRoom extends TossupRoom {
   scoreTossup ({ givenAnswer }) {
     const decision = super.scoreTossup({ givenAnswer });
     if (decision.directive === "accept") {
+      this.bonusEligibleUserId = this.buzzedIn;
       this.switchToBonusRound();
     }
     return decision;
@@ -77,10 +81,10 @@ export default class TossupBonusRoom extends TossupRoom {
 
   lastQuestionDict () {
     if (this.currentRound === ROUND.TOSSUP) {
-      return { oldBonus: this.bonus };
+      return { oldTossup: this.tossup };
     }
     else {
-      return { oldTossup: this.tossup };
+      return { oldBonus: this.bonus };
     }
   }
 
@@ -96,21 +100,35 @@ export default class TossupBonusRoom extends TossupRoom {
     const pointsPerPart = this.pointsPerPart;
 
     if (type === 'next' && bonusStarted) {
-      this.players[userId].updateStats(this.pointsPerPart.reduce((a, b) => a + b, 0), 1);
+      // Points already added incrementally during bonus, just update stats with 0 points
+      this.players[userId].updateStats(0, 1);
+      const oldBonus = this.bonus;  // Preserve oldBonus before switching rounds
       this.switchToTossupRound();
-      await this.nextTossup(userId, { type });
+      await this.nextTossup(userId, { type, oldBonus });
     }
     else {
       const lastQuestionDict = this.lastQuestionDict();
+
+      // If this is the first bonus (transitioning from tossup), preserve the oldTossup
+      const preservedTossup = (!bonusStarted && this.currentRound === ROUND.BONUS)
+        ? { oldTossup: this.tossup }
+        : {};
+
       this.bonus = await this.advanceQuestion();
       this.queryingQuestion = false;
 
       if (!this.bonus) {
-        this.emitMessage({ ...lastQuestionDict, type: 'end', lastPartRevealed, pointsPerPart, stats, userId });
+        this.emitMessage({ ...lastQuestionDict, ...preservedTossup, type: 'end', lastPartRevealed, pointsPerPart, stats, userId });
         return false;
       }
 
-      this.emitMessage({ ...lastQuestionDict, type, bonus: this.bonus, lastPartRevealed, packetLength: this.packetLength, pointsPerPart });
+      if (!this.bonus.parts || !Array.isArray(this.bonus.parts) || this.bonus.parts.length === 0) {
+        console.error('Invalid bonus received - missing or empty parts array:', this.bonus);
+        this.emitMessage({ ...lastQuestionDict, ...preservedTossup, type: 'end', lastPartRevealed, pointsPerPart, userId });
+        return false;
+      }
+
+      this.emitMessage({ ...lastQuestionDict, ...preservedTossup, type, bonus: this.bonus, lastPartRevealed, packetLength: this.packetLength, pointsPerPart });
 
       this.currentPartNumber = -1;
       this.pointsPerPart = [];
@@ -125,6 +143,11 @@ export default class TossupBonusRoom extends TossupRoom {
       return super.giveAnswer(userId, { givenAnswer });
     }
 
+    // Only the user who answered the tossup correctly can answer the bonus
+    if (userId !== this.bonusEligibleUserId) {
+      return false;
+    }
+
     if (typeof givenAnswer !== 'string') { return false; }
 
     this.liveAnswer = '';
@@ -132,7 +155,18 @@ export default class TossupBonusRoom extends TossupRoom {
     this.emitMessage({ type: 'timer-update', timeRemaining: ANSWER_TIME_LIMIT * 10 });
 
     const { directive, directedPrompt } = this.checkAnswer(this.bonus.answers[this.currentPartNumber], givenAnswer);
-    this.emitMessage({ type: 'give-answer', currentPartNumber: this.currentPartNumber, directive, directedPrompt, userId });
+    const points = directive === 'accept' ? this.getPartValue() : 0;
+    this.emitMessage({
+      type: 'give-answer',
+      currentPartNumber: this.currentPartNumber,
+      directive,
+      directedPrompt,
+      givenAnswer,
+      score: points,
+      userId,
+      username: this.players[userId].username,
+      bonus: this.bonus
+    });
 
     if (directive === 'prompt') {
       this.startServerTimer(
@@ -141,14 +175,23 @@ export default class TossupBonusRoom extends TossupRoom {
         () => this.giveAnswer(userId, { givenAnswer: this.liveAnswer })
       );
     } else {
-      this.pointsPerPart.push(directive === 'accept' ? this.getPartValue() : 0);
+      const partPoints = directive === 'accept' ? this.getPartValue() : 0;
+      this.pointsPerPart.push(partPoints);
+      // Immediately update player score on server so reconnection state is correct
+      this.players[userId].points += partPoints;
       this.revealNextAnswer();
       this.revealNextPart();
     }
   }
 
   startAnswer (userId) {
-    this.emitMessage({ type: 'start-answer', userId });
+    // Only the user who answered the tossup correctly can answer the bonus
+    if (userId !== this.bonusEligibleUserId) {
+      return false;
+    }
+
+    this.liveAnswer = '';  // Clear any previous answer
+    this.emitMessage({ type: 'start-answer', userId: this.bonusEligibleUserId });
     this.startServerTimer(
       ANSWER_TIME_LIMIT * 10,
       (time) => this.emitMessage({ type: 'timer-update', timeRemaining: time }),
@@ -185,7 +228,8 @@ export default class TossupBonusRoom extends TossupRoom {
       type: 'reveal-next-part',
       currentPartNumber: this.currentPartNumber,
       part: this.bonus.parts[this.currentPartNumber],
-      value: this.getPartValue()
+      value: this.getPartValue(),
+      bonusEligibleUserId: this.bonusEligibleUserId
     });
   }
 }

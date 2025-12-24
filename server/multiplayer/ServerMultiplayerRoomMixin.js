@@ -169,6 +169,44 @@ const ServerMultiplayerRoomMixin = (RoomClass) => class extends RoomClass {
       }));
     }
 
+    // Handle TossupBonusRoom reconnection - send bonus state if in bonus round
+    if (this.currentRound !== undefined && this.currentRound === 1 && this.bonus && this.bonus.parts) { // 1 = ROUND.BONUS
+      socket.send(JSON.stringify({
+        type: 'connection-acknowledged-bonus',
+        bonus: this.bonus,
+        bonusProgress: this.bonusProgress,
+        currentPartNumber: this.currentPartNumber,
+        pointsPerPart: this.pointsPerPart,
+        bonusEligibleUserId: this.bonusEligibleUserId
+      }));
+
+      // Reconstruct bonus UI by sending reveal messages for completed parts
+      if (this.bonus.leadin) {
+        socket.send(JSON.stringify({ type: 'reveal-leadin', leadin: this.bonus.leadin }));
+      }
+
+      // Reveal each part that has been shown
+      for (let i = 0; i <= this.currentPartNumber && i < this.bonus.parts.length; i++) {
+        socket.send(JSON.stringify({
+          type: 'reveal-next-part',
+          currentPartNumber: i,
+          part: this.bonus.parts[i],
+          value: this.bonus.values?.[i] ?? 10,
+          bonusEligibleUserId: this.bonusEligibleUserId
+        }));
+
+        // If this part has been answered, reveal its answer
+        if (i < this.pointsPerPart.length) {
+          socket.send(JSON.stringify({
+            type: 'reveal-next-answer',
+            answer: this.bonus.answers[i],
+            currentPartNumber: i,
+            lastPartRevealed: i === this.bonus.parts.length - 1
+          }));
+        }
+      }
+    }
+
     this.emitMessage({ type: 'join', isNew, userId, username, user: this.players[userId] });
   }
 
@@ -213,7 +251,8 @@ const ServerMultiplayerRoomMixin = (RoomClass) => class extends RoomClass {
 
   giveAnswerLiveUpdate (userId, { givenAnswer }) {
     if (typeof givenAnswer !== 'string') { return false; }
-    if (userId !== this.buzzedIn) { return false; }
+    // Allow live updates during bonuses (when buzzedIn is null) or from the user who buzzed
+    if (this.buzzedIn && userId !== this.buzzedIn) { return false; }
     this.liveAnswer = givenAnswer;
     const username = this.players[userId].username;
     this.emitMessage({ type: 'give-answer-live-update', givenAnswer, username });

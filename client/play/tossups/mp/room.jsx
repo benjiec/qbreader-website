@@ -163,7 +163,12 @@ document.addEventListener('keydown', (event) => {
 
   switch (event.key?.toLowerCase()) {
     case ' ':
-      document.getElementById('buzz').click();
+      // During bonus rounds, spacebar should reveal; during tossups, it should buzz
+      if (!document.getElementById('reveal').disabled) {
+        document.getElementById('reveal').click();
+      } else {
+        document.getElementById('buzz').click();
+      }
       // Prevent spacebar from scrolling the page
       if (event.target === document.body) { event.preventDefault(); }
       break;

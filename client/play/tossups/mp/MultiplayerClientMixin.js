@@ -22,6 +22,7 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
       case 'connection-acknowledged': return this.connectionAcknowledged(data);
       case 'connection-acknowledged-query': return this.connectionAcknowledgedQuery(data);
       case 'connection-acknowledged-tossup': return this.connectionAcknowledgedTossup(data);
+      case 'connection-acknowledged-bonus': return this.connectionAcknowledgedBonus(data);
       case 'enforcing-removal': return this.ackRemovedFromRoom(data);
       case 'error': return this.handleError(data);
       case 'force-username': return this.forceUsername(data);
@@ -246,6 +247,28 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
     document.getElementById('question-number-info').textContent = this.room.tossup?.number ?? '-';
   }
 
+  connectionAcknowledgedBonus ({ bonus, bonusProgress, currentPartNumber, pointsPerPart, bonusEligibleUserId }) {
+    // Store bonus state in room
+    this.room.bonus = bonus;
+    this.room.bonusProgress = bonusProgress;
+    this.room.currentPartNumber = currentPartNumber;
+    this.room.pointsPerPart = pointsPerPart;
+    this.room.bonusEligibleUserId = bonusEligibleUserId;
+
+    // Clear the question display - it will be rebuilt by the reveal messages
+    document.getElementById('question').textContent = '';
+    document.getElementById('answer').textContent = '';
+
+    // Enable buzz button for bonuses (disabled for tossups during reconnection)
+    document.getElementById('buzz').disabled = true;
+
+    // The reveal-next-part and reveal-next-answer messages will follow to rebuild the UI
+    // If bonus is complete (lastPartRevealed), enable Next button
+    if (bonusProgress === 2) { // BONUS_PROGRESS_ENUM.LAST_PART_REVEALED
+      this.showNextButton();
+    }
+  }
+
   failedVotekickPoints ({ userId }) {
     if (userId === this.USER_ID) {
       window.alert('You can only votekick once you have answered a question correctly!');
@@ -321,6 +344,14 @@ const MultiplayerClientMixin = (ClientClass) => class extends ClientClass {
           pointValue: score
         });
       }
+    }
+
+    if (data.bonus && data.currentPartNumber !== undefined) {
+      // Update player points for bonus parts
+      this.room.players[userId].points += score;
+
+      upsertPlayerItem(this.room.players[userId], this.USER_ID, this.room.ownerId, this.socket, this.room.public);
+      this.sortPlayerListGroup();
     }
   }
 
