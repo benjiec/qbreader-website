@@ -1,6 +1,7 @@
 import { bonuses, tossups } from './collections.js';
 
 import { OKCYAN, ENDC, OKGREEN } from '../../server/bcolors.js';
+import unformatString from '../../shared/unformat-string.js';
 import { DEFAULT_QUERY_RETURN_LENGTH, MAX_QUERY_RETURN_LENGTH } from '../../constants.js';
 // eslint-disable-next-line no-unused-vars
 import * as types from '../../types.js';
@@ -10,19 +11,6 @@ import * as types from '../../types.js';
  */
 function escapeRegExp (string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-}
-
-function unformatString (string) {
-  return string
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\u2010-\u2015]/g, '-')
-    .replace(/[\u2018-\u201B]/g, '\'')
-    .replace(/[\u201C-\u201F]/g, '"')
-    .replace(/[\u2026]/g, '...')
-    .replace(/[\u2032-\u2037]/g, '\'')
-    .replace(/[\u00B7\u22C5\u2027]/g, '') // interpuncts
-    .replace(/\u0142/g, 'l'); // ł -> l
 }
 
 function getQuerySummary (options) {
@@ -258,7 +246,7 @@ async function getBonusQuery (options) {
   }
 }
 
-function buildQueryAggregation ({ query, difficulties, categories, subcategories, alternateSubcategories, setName, maxReturnLength, randomize, minYear, maxYear, isEmpty, powermarkOnly }) {
+function buildQueryAggregation ({ query, difficulties, categories, subcategories, alternateSubcategories, setName, maxReturnLength, randomize, minYear, maxYear, isEmpty, powermarkOnly, regex = false }) {
   if (isEmpty) {
     delete query.$or;
   }
@@ -282,10 +270,10 @@ function buildQueryAggregation ({ query, difficulties, categories, subcategories
   if (setName) {
     // setName is now an array after being split by commas
     if (Array.isArray(setName)) {
-      query['set.name'] = { $in: setName.map(name => new RegExp(name, 'i')) };
+      query['set.name'] = { $in: setName.map(name => new RegExp(regex ? name : escapeRegExp(name), 'i')) };
     } else {
       // Backward compatibility: if setName is a string (shouldn't happen after API route change)
-      query['set.name'] = { $regex: setName, $options: 'i' };
+      query['set.name'] = { $regex: regex ? setName : escapeRegExp(setName), $options: 'i' };
     }
   }
 
