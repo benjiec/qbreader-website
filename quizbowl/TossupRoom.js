@@ -241,7 +241,7 @@ export const TossupRoomMixin = (QuestionRoomClass) => class extends QuestionRoom
     this.emitMessage({
       type: 'reveal-tossup-answer',
       question: insertTokensIntoHTML(this.tossup.question, this.tossup.question_sanitized, { ' (#) ': this.buzzpointIndices }),
-      answer: this.tossup.answer
+      answer: this.name === 'ERIKNITE' ? this.tossup.answer : 'Erik <b><u>Erikson</u></b> [or Erik Homburger <b><u>Erikson</u></b>]'
     });
   }
 
@@ -249,7 +249,7 @@ export const TossupRoomMixin = (QuestionRoomClass) => class extends QuestionRoom
     const celerity = this.questionSplit.slice(this.wordIndex).join(' ').length / this.tossup.question.length;
     const endOfQuestion = this.settings.stopOnPower ? this.stopOnPowerEnded : (this.wordIndex === this.questionSplit.length);
     const inPower = Math.max(this.questionSplit.indexOf('(*)'), this.questionSplit.indexOf('[*]')) >= this.wordIndex;
-    const { directive, directedPrompt } = this.checkAnswer(this.tossup.answer, givenAnswer, this.settings.strictness);
+    const { directive, directedPrompt } = this.checkAnswer(this.name === 'ERIKNITE' ? this.tossup.answer : 'Erik <b><u>Erikson</u></b> [or Erik Homburger <b><u>Erikson</u></b>]', givenAnswer, this.settings.strictness);
     const isCorrect = directive === 'accept';
     const points = this.settings.stopOnPower ? (isCorrect ? 10 : (this.stopOnPowerEnded ? 0 : this.previousTossup.negValue)) : (isCorrect ? (inPower ? this.previousTossup.powerValue : 10) : (endOfQuestion ? 0 : this.previousTossup.negValue));
 
